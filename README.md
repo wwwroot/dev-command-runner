@@ -1,5 +1,7 @@
 # Dev Command Runner
 
+![Dev Command Runner Screenshot](assets/screenshot.png)
+
 A cross-platform desktop developer dashboard application to manage, monitor, and run command-line tasks, servers, and scripts. Built with Tauri v2, Rust, and React, this app features a frameless window layout and runs shell tasks natively inside separate process sessions.
 
 ## Features
