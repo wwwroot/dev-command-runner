@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
+  "$schema": "https://schema.tauri.app/config/2",
   "productName": "Dev Command Runner",
   "version": "1.0.0",
   "identifier": "com.dev-command-runner",

@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Plus, Minus, Square, X, Terminal, Download, Upload, ChevronsUp, ChevronsDown, Menu } from "lucide-react";
+import { Plus, Minus, Square, X, Terminal, Download, Upload, ChevronsUp, ChevronsDown, Menu, ChevronDown } from "lucide-react";
 
 const appWindow = getCurrentWindow();
 
@@ -10,6 +10,10 @@ export function Titlebar({ onAddTask, onExport, onImport, searchFilter, setSearc
 
   const handleMinimize = async () => {
     await appWindow.minimize();
+  };
+
+  const handleMinimizeToTray = async () => {
+    await appWindow.hide();
   };
 
   const handleToggleMaximize = async () => {
@@ -26,7 +30,7 @@ export function Titlebar({ onAddTask, onExport, onImport, searchFilter, setSearc
       <div className="titlebar-left">
         <Terminal size={16} color="#3b82f6" />
         <span className="titlebar-title" data-tauri-drag-region>Dev Command Runner</span>
-        
+
         <div className="titlebar-actions-inline">
           <button
             className="btn-action-icon"
@@ -120,6 +124,9 @@ export function Titlebar({ onAddTask, onExport, onImport, searchFilter, setSearc
       </div>
 
       <div className="titlebar-right">
+        <button className="window-control-btn" onClick={handleMinimizeToTray} title="Minimize to Tray">
+          <ChevronDown size={12} />
+        </button>
         <button className="window-control-btn" onClick={handleMinimize}>
           <Minus size={14} />
         </button>

@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
-use tauri::{Emitter, State, Window};
+use tauri::{Emitter, State, Window, Manager};
+use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState};
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
 
 #[derive(Clone, serde::Serialize)]
 struct LogPayload {
@@ -265,6 +267,78 @@ pub fn run() {
         .manage(process_map)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .setup(|app| {
+            // Retrieve default window icon if available
+            let icon = app.default_window_icon().cloned();
+
+            // Build the tray menu
+            let show_i = MenuItemBuilder::with_id("show", "Show App").build(app)?;
+            let quit_i = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+
+            let menu = MenuBuilder::new(app)
+                .items(&[&show_i, &quit_i])
+                .build()?;
+
+            let mut tray_builder = TrayIconBuilder::new()
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| {
+                    match event.id().as_ref() {
+                        "show" => {
+                            if let Some(win) = app.get_webview_window("main") {
+                                let _ = win.show();
+                                let _ = win.set_focus();
+                            }
+                        }
+                        "quit" => {
+                            let process_map = app.state::<ProcessMap>();
+                            let pids: Vec<(String, u32)> = {
+                                let map = process_map.lock().unwrap();
+                                map.iter().map(|(k, v)| (k.clone(), *v)).collect()
+                            };
+                            for (_task_id, pid) in pids {
+                                #[cfg(target_os = "windows")]
+                                {
+                                    let _ = Command::new("taskkill")
+                                        .args(&["/F", "/T", "/PID", &pid.to_string()])
+                                        .output();
+                                }
+                                #[cfg(not(target_os = "windows"))]
+                                {
+                                    let _ = Command::new("kill")
+                                        .args(&["-9", &pid.to_string()])
+                                        .output();
+                                }
+                            }
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    match event {
+                        TrayIconEvent::Click { 
+                            button: MouseButton::Left, 
+                            button_state: MouseButtonState::Up, 
+                            .. 
+                        } => {
+                            if let Some(win) = tray.app_handle().get_webview_window("main") {
+                                let _ = win.show();
+                                let _ = win.set_focus();
+                            }
+                        }
+                        _ => {}
+                    }
+                });
+
+            if let Some(i) = icon {
+                tray_builder = tray_builder.icon(i);
+            }
+
+            let _tray = tray_builder.build(app)?;
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             spawn_shell_task,
             kill_shell_task,

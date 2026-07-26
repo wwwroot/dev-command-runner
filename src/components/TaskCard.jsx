@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Play, RotateCw, Square, FolderOpen, Trash2, ExternalLink, Globe, ChevronDown, ChevronRight, GripVertical } from "lucide-react";
+import { Play, RotateCw, Square, FolderOpen, Trash2, ChevronDown, ChevronRight, GripVertical } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { ConsoleLogs } from "./ConsoleLogs";
 import { runTaskProcess, stopTaskProcess } from "../services/processRunner";
@@ -158,11 +158,11 @@ export function TaskCard({
           {getStatusBadge()}
 
           {!isRunning ? (
-            <button className="btn-action-icon btn-run" onClick={handleRun} title="Run Command" data-tooltip="Run Command">
+            <button className="btn-action-icon btn-run" onClick={handleRun} title="Run Command" data-tooltip="Run">
               <Play size={15} />
             </button>
           ) : (
-            <button className="btn-action-icon btn-stop" onClick={handleStop} title="Stop Command" data-tooltip="Stop Command">
+            <button className="btn-action-icon btn-stop" onClick={handleStop} title="Stop Command" data-tooltip="Stop">
               <Square size={15} />
             </button>
           )}
@@ -172,7 +172,7 @@ export function TaskCard({
             onClick={handleRestart}
             title="Restart Command"
             disabled={!isRunning}
-            data-tooltip="Restart Command"
+            data-tooltip="Restart"
           >
             <RotateCw size={15} />
           </button>
@@ -180,9 +180,9 @@ export function TaskCard({
           <button
             className="btn-action-icon btn-delete"
             onClick={() => onDeleteTask(task.id)}
-            title="Delete Task Shortcut"
+            title="Delete Task Command"
             disabled={isRunning}
-            data-tooltip="Delete Shortcut"
+            data-tooltip="Delete"
           >
             <Trash2 size={15} />
           </button>
@@ -242,9 +242,7 @@ export function TaskCard({
                   title={`Open ${url} in Browser`}
                   data-tooltip="Open in Browser"
                 >
-                  <Globe size={13} />
                   <span>{url}</span>
-                  <ExternalLink size={11} />
                 </button>
               ))}
             </div>
