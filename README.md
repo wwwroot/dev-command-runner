@@ -1,61 +1,65 @@
 # Dev Command Runner
 
-![Dev Command Runner Screenshot](assets/screenshot.png?v=1.0.1)
+[![Tauri](https://img.shields.io/badge/Tauri-v2.11-24C8D8?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
+[![Rust](https://img.shields.io/badge/Rust-2021-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
+[![React](https://img.shields.io/badge/React-18.2-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
-A cross-platform desktop developer dashboard application to manage, monitor, and run command-line tasks, servers, and scripts. Built with Tauri v2, Rust, and React, this app features a frameless window layout and runs shell tasks natively inside separate process sessions.
+A cross-platform desktop dashboard to manage, run, and monitor background development processes, servers, and scripts. Built with Tauri v2, Rust, and React, it operates inside a frameless window layout and executes shell tasks natively using background process sessions.
+
+<img src="assets/screenshot.png?v=1.0.1" width="75%" alt="Application Screenshot">
+
+---
 
 ## Features
 
-- **Frameless Custom Titlebar**: Native window buttons (Minimize, Maximize, Close) with customized click handles and drag areas.
-- **Task Management**: Create, edit, and organize command shortcuts with configurable working directories, tags, and autoscroll configurations.
-- **Drag-and-Drop Reordering**: Rearrange cards dynamically with vertical grab handles; positioning is saved to local storage.
-- **Process Log Console**: Real-time console terminal outputs featuring automatic scrolling toggles, log clearing, and ANSI color code strip parsers.
-- **Native Browser Redirection**: Auto-detects HTTP/HTTPS links printed in process outputs; clicking redirects natively to your OS default browser.
-- **Startup Auto-Run Execution**: Configure individual cards to execute their shell commands automatically as soon as the application starts.
-- **Window State Retention**: Tracks and restores window size dimensions and display coordinates position across application starts.
-- **Confirmation Warning Overlays**: Prompts confirmation modal before deleting tasks and intercepts window exit actions if background commands are still active.
-- **JSON Import & Export**: Back up, restore, or share command cards by exporting configuration configurations to JSON.
-- **Cross-Platform OS Shells**: Configures shell commands using conditional compilation (spawns PowerShell cmdlets on Windows, and standard Unix `sh` on macOS/Linux).
+- **System Tray Support** → Run the application in the background. Hides the window to the tray on minimize, restores on left-click, and provides a quick context menu to show the window or quit cleanly.
+- **Process Cleanup on Exit** → Quitting the application automatically terminates all active child process trees (e.g. Node/Vite processes) safely.
+- **Custom Titlebar** → A custom drag handle area with window controls (Minimize to Tray, Minimize to Taskbar, Maximize, Close) styled as segmented button groups.
+- **Task Management** → Register and configure custom command shortcuts with distinct working directories, command lines, and toggleable auto-run settings.
+- **Drag-and-Drop Reordering** → Persists task card positions in local storage and allows vertical rearranging using grab handles.
+- **Integrated Console** → Real-time stdout and stderr console logging with ANSI color code parsing, manual clearing, and toggleable auto-scroll.
+- **Console Clipboard Support** → Copy entire console logs to your clipboard with temporary visual feedback.
+- **Auto-Detect URLs** → Automatically scans process logs for localhost/network URLs and opens them in the system's default browser on click.
+- **Persisted Window State** → Saves and restores the window's screen position and size across launches.
+- **Safety Overlays** → Prompts warnings before deleting tasks or closing the window while background processes are running.
+- **Import & Export** → Backup and restore all command shortcuts via JSON configurations.
+
+---
 
 ## Prerequisites
 
-To run and build this application locally, ensure you have installed:
+Before running or building the application, ensure your environment has:
 
 - **Node.js** (v18 or higher)
-- **Rust toolchain** (rustc, cargo, and rustup)
-- **Tauri v2 dependencies** (consult the official [Tauri Prerequisite Guide](https://v2.tauri.app/start/prerequisites/) for your specific operating system).
+- **Rust Toolchain** (rustc, cargo, and rustup)
+- **Tauri dependencies**: Refer to the [Tauri v2 Prerequisite Guide](https://v2.tauri.app/start/prerequisites/) for your operating system.
+
+---
 
 ## Getting Started
 
 ### 1. Install Dependencies
-
-Clone this repository and run npm install inside the root folder:
-
 ```bash
 npm install
 ```
 
-### 2. Run in Development Mode
-
-Spawn the Tauri development shell window with hot-reloading active:
-
+### 2. Run Development Mode
 ```bash
 npm run tauri dev
 ```
 
-### 3. Build for Production
-
-Compile and bundle the production release binary executable (.exe, .dmg, or .deb) depending on your host operating system:
-
+### 3. Build Production Executable
 ```bash
 npm run tauri build
 ```
+Built binaries and installers (e.g., `.exe` or `.msi` on Windows) will be created inside the `src-tauri/target/release/bundle/` directory.
 
-The output packages will be created inside the `src-tauri/target/release/bundle/` directory.
+---
 
-## Configuration Format
+## Configuration Schema
 
-Shortcut data can be exported and imported using the following JSON schema:
+Shortcut databases can be backed up or restored using the following JSON structure:
 
 ```json
 [
@@ -71,6 +75,8 @@ Shortcut data can be exported and imported using the following JSON schema:
 ]
 ```
 
+---
+
 ## License
 
-MIT License. Feel free to use and distribute for open-source developments.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
