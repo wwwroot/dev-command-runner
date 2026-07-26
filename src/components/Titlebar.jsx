@@ -32,46 +32,51 @@ export function Titlebar({ onAddTask, onExport, onImport, searchFilter, setSearc
         <span className="titlebar-title" data-tauri-drag-region>Dev Command Runner</span>
 
         <div className="titlebar-actions-inline">
-          <button
-            className="btn-action-icon"
-            onClick={onAddTask}
-            title="Add Command"
-            data-tooltip="Add Command"
-          >
-            <Plus size={15} />
-          </button>
-          <button
-            className="btn-action-icon"
-            onClick={handleImportClick}
-            title="Import JSON Shortcuts"
-            data-tooltip="Import JSON"
-          >
-            <Upload size={15} />
-          </button>
-          <button
-            className="btn-action-icon"
-            onClick={onExport}
-            title="Export JSON Shortcuts"
-            data-tooltip="Export JSON"
-          >
-            <Download size={15} />
-          </button>
-          <button
-            className="btn-action-icon"
-            onClick={onExpandAll}
-            title="Expand All Cards"
-            data-tooltip="Expand All"
-          >
-            <ChevronsDown size={15} />
-          </button>
-          <button
-            className="btn-action-icon"
-            onClick={onCollapseAll}
-            title="Collapse All Cards"
-            data-tooltip="Collapse All"
-          >
-            <ChevronsUp size={15} />
-          </button>
+          <div className="button-group">
+            <button
+              className="btn-action-icon"
+              onClick={onAddTask}
+              title="Add Command"
+              data-tooltip="Add Command"
+            >
+              <Plus size={15} />
+            </button>
+            <button
+              className="btn-action-icon"
+              onClick={handleImportClick}
+              title="Import JSON Shortcuts"
+              data-tooltip="Import JSON"
+            >
+              <Upload size={15} />
+            </button>
+            <button
+              className="btn-action-icon"
+              onClick={onExport}
+              title="Export JSON Shortcuts"
+              data-tooltip="Export JSON"
+            >
+              <Download size={15} />
+            </button>
+          </div>
+
+          <div className="button-group">
+            <button
+              className="btn-action-icon"
+              onClick={onExpandAll}
+              title="Expand All Cards"
+              data-tooltip="Expand All"
+            >
+              <ChevronsDown size={15} />
+            </button>
+            <button
+              className="btn-action-icon"
+              onClick={onCollapseAll}
+              title="Collapse All Cards"
+              data-tooltip="Collapse All"
+            >
+              <ChevronsUp size={15} />
+            </button>
+          </div>
         </div>
 
         <div className="titlebar-actions-dropdown">
@@ -116,7 +121,7 @@ export function Titlebar({ onAddTask, onExport, onImport, searchFilter, setSearc
           <input
             type="text"
             className="search-input"
-            placeholder="Search command or path..."
+            placeholder="Search task, command or path..."
             value={searchFilter}
             onChange={(e) => setSearchFilter(e.target.value)}
           />

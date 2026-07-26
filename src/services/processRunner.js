@@ -13,18 +13,18 @@ async function initGlobalTauriListeners() {
   try {
     await listen("task-log", (event) => {
       const { task_id, line, is_error } = event.payload || {};
-      const cbs = taskLogCallbacks.get(task_id);
-      if (cbs) {
-        cbs.forEach((cb) => cb(line, is_error));
+      const cb = taskLogCallbacks.get(task_id);
+      if (cb) {
+        cb(line, is_error);
       }
     });
 
     await listen("task-status", (event) => {
       const { task_id, status } = event.payload || {};
       activeTaskStatusMap.set(task_id, status);
-      const cbs = taskStatusCallbacks.get(task_id);
-      if (cbs) {
-        cbs.forEach((cb) => cb(status));
+      const cb = taskStatusCallbacks.get(task_id);
+      if (cb) {
+        cb(status);
       }
     });
   } catch (err) {
@@ -48,15 +48,8 @@ export async function runTaskProcess(task, onLog, onStatusChange) {
 
   await initGlobalTauriListeners();
 
-  if (!taskLogCallbacks.has(task.id)) {
-    taskLogCallbacks.set(task.id, new Set());
-  }
-  taskLogCallbacks.get(task.id).add(onLog);
-
-  if (!taskStatusCallbacks.has(task.id)) {
-    taskStatusCallbacks.set(task.id, new Set());
-  }
-  taskStatusCallbacks.get(task.id).add(onStatusChange);
+  taskLogCallbacks.set(task.id, onLog);
+  taskStatusCallbacks.set(task.id, onStatusChange);
 
   onLog(`[SYS] Initializing process execution in "${task.cwd || '.'}"...`, false);
   onLog(`[SYS] Command: ${task.command}`, false);

@@ -147,7 +147,7 @@ export function App() {
   const handleAddTask = () => {
     const newTask = {
       id: `task-${Date.now()}`,
-      title: "New Command Shortcut",
+      title: "New Command",
       cwd: ".",
       command: "npm run dev",
       autoScroll: true
@@ -329,8 +329,8 @@ export function App() {
   });
 
   const isTauri = typeof window !== "undefined" && (
-    window.__TAURI_INTERNALS__ !== undefined || 
-    window.__TAURI_IPC__ !== undefined || 
+    window.__TAURI_INTERNALS__ !== undefined ||
+    window.__TAURI_IPC__ !== undefined ||
     window.__TAURI__ !== undefined
   );
 
@@ -391,17 +391,15 @@ export function App() {
           </span>
         </div>
         <div className="statusbar-right" data-tauri-drag-region>
-          <span data-tauri-drag-region>Dev Command Runner</span>
-          <span className="status-divider" data-tauri-drag-region>|</span>
-          <span data-tauri-drag-region>v1.0.0</span>
+          <span data-tauri-drag-region>v1.0.1</span>
         </div>
       </footer>
 
       {showDeleteConfirm && (
         <div className="modal-overlay">
           <div className="modal-content">
-            <h3>Delete Shortcut</h3>
-            <p>Are you sure you want to delete this command shortcut?</p>
+            <h3>Delete Command</h3>
+            <p>Are you sure you want to delete this command?</p>
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => {
                 setShowDeleteConfirm(false);
