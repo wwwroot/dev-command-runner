@@ -22,6 +22,137 @@ struct StatusPayload {
 
 type ProcessMap = Arc<Mutex<HashMap<String, u32>>>;
 
+#[cfg(target_os = "windows")]
+fn get_system_root() -> String {
+    std::env::var("SystemRoot")
+        .or_else(|_| std::env::var("WINDIR"))
+        .unwrap_or_else(|_| "C:\\Windows".to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn find_windows_binary(name: &str) -> String {
+    let sys_root = get_system_root();
+    let candidates: Vec<String> = match name {
+        "powershell" | "powershell.exe" => vec![
+            format!("{}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", sys_root),
+            format!("{}\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe", sys_root),
+            "powershell.exe".to_string(),
+            "pwsh.exe".to_string(),
+        ],
+        "cmd" | "cmd.exe" => vec![
+            format!("{}\\System32\\cmd.exe", sys_root),
+            format!("{}\\SysWOW64\\cmd.exe", sys_root),
+            "cmd.exe".to_string(),
+        ],
+        "taskkill" | "taskkill.exe" => vec![
+            format!("{}\\System32\\taskkill.exe", sys_root),
+            format!("{}\\SysWOW64\\taskkill.exe", sys_root),
+            "taskkill.exe".to_string(),
+        ],
+        _ => vec![
+            format!("{}\\System32\\{}.exe", sys_root, name),
+            format!("{}.exe", name),
+            name.to_string(),
+        ],
+    };
+
+    for candidate in candidates {
+        if std::path::Path::new(&candidate).exists() {
+            return candidate;
+        }
+    }
+
+    if !name.ends_with(".exe") {
+        format!("{}.exe", name)
+    } else {
+        name.to_string()
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn get_augmented_path() -> String {
+    let current_path = std::env::var("PATH").unwrap_or_default();
+    let sys_root = get_system_root();
+    let user_profile = std::env::var("USERPROFILE").unwrap_or_default();
+    let app_data = std::env::var("APPDATA").unwrap_or_default();
+    let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
+
+    let mut path_list: Vec<String> = current_path
+        .split(';')
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.to_string())
+        .collect();
+
+    let critical_system_paths = [
+        format!("{}\\System32", sys_root),
+        format!("{}\\System32\\WindowsPowerShell\\v1.0", sys_root),
+        format!("{}\\System32\\Wbem", sys_root),
+        format!("{}\\SysWOW64", sys_root),
+        sys_root.clone(),
+    ];
+
+    let common_dev_paths = [
+        format!("{}\\npm", app_data),
+        format!("{}\\Roaming\\npm", app_data),
+        format!("{}\\Programs\\pnpm", local_app_data),
+        format!("{}\\Yarn\\bin", local_app_data),
+        format!("{}\\.bun\\bin", user_profile),
+        format!("{}\\.cargo\\bin", user_profile),
+        format!("{}\\scoop\\shims", user_profile),
+        format!("{}\\AppData\\Local\\Programs\\fnm", user_profile),
+        format!("{}\\AppData\\Roaming\\nvm", user_profile),
+        "C:\\Program Files\\nodejs".to_string(),
+        "C:\\Program Files (x86)\\nodejs".to_string(),
+        "C:\\Program Files\\Git\\cmd".to_string(),
+        "C:\\Program Files\\Git\\bin".to_string(),
+        "C:\\Program Files\\Docker\\Docker\\resources\\bin".to_string(),
+    ];
+
+    for p in critical_system_paths.iter().chain(common_dev_paths.iter()) {
+        if !p.is_empty() && std::path::Path::new(p).exists() {
+            if !path_list.iter().any(|entry| entry.eq_ignore_ascii_case(p)) {
+                path_list.push(p.clone());
+            }
+        }
+    }
+
+    path_list.join(";")
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_augmented_path_unix() -> String {
+    let current_path = std::env::var("PATH").unwrap_or_default();
+    let home = std::env::var("HOME").unwrap_or_default();
+
+    let mut path_list: Vec<String> = current_path
+        .split(':')
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.to_string())
+        .collect();
+
+    let common_unix_paths = [
+        "/usr/local/bin".to_string(),
+        "/usr/local/sbin".to_string(),
+        "/opt/homebrew/bin".to_string(),
+        "/opt/homebrew/sbin".to_string(),
+        format!("{}/.cargo/bin", home),
+        format!("{}/.bun/bin", home),
+        format!("{}/.local/bin", home),
+        format!("{}/.yarn/bin", home),
+        format!("{}/.nvm/current/bin", home),
+    ];
+
+    for p in common_unix_paths.iter() {
+        if !p.is_empty() && std::path::Path::new(p).exists() {
+            if !path_list.iter().any(|entry| entry == p) {
+                path_list.push(p.clone());
+            }
+        }
+    }
+
+    path_list.join(":")
+}
+
 #[tauri::command]
 async fn spawn_shell_task(
     window: Window,
@@ -47,57 +178,144 @@ async fn spawn_shell_task(
         );
 
         #[cfg(target_os = "windows")]
-        let (shell, args) = {
+        let (shell_exe, args, use_fallback) = {
+            let ps_binary = find_windows_binary("powershell");
             let formatted_cmd = format!(
                 "Set-Location -LiteralPath '{}'; {}",
                 cwd.replace("'", "''"),
                 command
             );
-            ("powershell", vec!["-NoProfile".to_string(), "-ExecutionPolicy".to_string(), "Bypass".to_string(), "-Command".to_string(), formatted_cmd])
+            (
+                ps_binary,
+                vec![
+                    "-ExecutionPolicy".to_string(),
+                    "Bypass".to_string(),
+                    "-Command".to_string(),
+                    formatted_cmd,
+                ],
+                true,
+            )
         };
 
         #[cfg(not(target_os = "windows"))]
-        let (shell, args) = {
+        let (shell_exe, args, use_fallback) = {
             let formatted_cmd = format!(
                 "cd '{}' && {}",
                 cwd.replace("'", "'\\''"),
                 command
             );
-            ("sh", vec!["-c".to_string(), formatted_cmd])
+            ("sh".to_string(), vec!["-c".to_string(), formatted_cmd], false)
         };
 
-        let mut child_cmd = Command::new(shell);
+        let mut child_cmd = Command::new(&shell_exe);
         child_cmd.args(&args);
         child_cmd.stdout(Stdio::piped());
         child_cmd.stderr(Stdio::piped());
+
+        let cwd_path = std::path::Path::new(&cwd);
+        if cwd_path.is_dir() {
+            child_cmd.current_dir(cwd_path);
+        }
 
         #[cfg(target_os = "windows")]
         {
             use std::os::windows::process::CommandExt;
             const CREATE_NO_WINDOW: u32 = 0x08000000;
             child_cmd.creation_flags(CREATE_NO_WINDOW);
+            child_cmd.env("PATH", get_augmented_path());
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            child_cmd.env("PATH", get_augmented_path_unix());
         }
 
         let mut child = match child_cmd.spawn() {
             Ok(c) => c,
             Err(e) => {
-                let _ = window.emit(
-                    "task-log",
-                    LogPayload {
-                        task_id: task_id_clone.clone(),
-                        line: format!("[SYS-ERR] Failed to spawn process: {}", e),
-                        is_error: true,
-                    },
-                );
-                let _ = window.emit(
-                    "task-status",
-                    StatusPayload {
-                        task_id: task_id_clone,
-                        status: "FAILED".to_string(),
-                        code: None,
-                    },
-                );
-                return;
+                #[cfg(target_os = "windows")]
+                if use_fallback {
+                    let cmd_binary = find_windows_binary("cmd");
+                    let formatted_cmd_str = format!("cd /d \"{}\" && {}", cwd.replace("\"", "\"\""), command);
+                    let mut fallback_cmd = Command::new(&cmd_binary);
+                    fallback_cmd.args(&["/D", "/S", "/C", &formatted_cmd_str]);
+                    fallback_cmd.stdout(Stdio::piped());
+                    fallback_cmd.stderr(Stdio::piped());
+
+                    if cwd_path.is_dir() {
+                        fallback_cmd.current_dir(cwd_path);
+                    }
+
+                    use std::os::windows::process::CommandExt;
+                    const CREATE_NO_WINDOW: u32 = 0x08000000;
+                    fallback_cmd.creation_flags(CREATE_NO_WINDOW);
+                    fallback_cmd.env("PATH", get_augmented_path());
+
+                    match fallback_cmd.spawn() {
+                        Ok(c) => c,
+                        Err(e2) => {
+                            let _ = window.emit(
+                                "task-log",
+                                LogPayload {
+                                    task_id: task_id_clone.clone(),
+                                    line: format!(
+                                        "[SYS-ERR] Failed to spawn process (PowerShell: {}, CMD: {})",
+                                        e, e2
+                                    ),
+                                    is_error: true,
+                                },
+                            );
+                            let _ = window.emit(
+                                "task-status",
+                                StatusPayload {
+                                    task_id: task_id_clone,
+                                    status: "FAILED".to_string(),
+                                    code: None,
+                                },
+                            );
+                            return;
+                        }
+                    }
+                } else {
+                    let _ = window.emit(
+                        "task-log",
+                        LogPayload {
+                            task_id: task_id_clone.clone(),
+                            line: format!("[SYS-ERR] Failed to spawn process: {}", e),
+                            is_error: true,
+                        },
+                    );
+                    let _ = window.emit(
+                        "task-status",
+                        StatusPayload {
+                            task_id: task_id_clone,
+                            status: "FAILED".to_string(),
+                            code: None,
+                        },
+                    );
+                    return;
+                }
+
+                #[cfg(not(target_os = "windows"))]
+                {
+                    let _ = window.emit(
+                        "task-log",
+                        LogPayload {
+                            task_id: task_id_clone.clone(),
+                            line: format!("[SYS-ERR] Failed to spawn process: {}", e),
+                            is_error: true,
+                        },
+                    );
+                    let _ = window.emit(
+                        "task-status",
+                        StatusPayload {
+                            task_id: task_id_clone,
+                            status: "FAILED".to_string(),
+                            code: None,
+                        },
+                    );
+                    return;
+                }
             }
         };
 
@@ -209,7 +427,8 @@ fn is_task_process_active(process_map: State<'_, ProcessMap>, task_id: String) -
 fn open_in_browser(url: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        if let Err(e) = Command::new("cmd")
+        let cmd_exe = find_windows_binary("cmd");
+        if let Err(e) = Command::new(&cmd_exe)
             .args(&["/C", "start", "", &url])
             .spawn()
         {
@@ -247,7 +466,8 @@ fn kill_task_by_id(map_mutex: &Arc<Mutex<HashMap<String, u32>>>, task_id: &str) 
     if let Some(pid) = map.remove(task_id) {
         #[cfg(target_os = "windows")]
         {
-            let _ = Command::new("taskkill")
+            let taskkill_exe = find_windows_binary("taskkill");
+            let _ = Command::new(&taskkill_exe)
                 .args(&["/F", "/T", "/PID", &pid.to_string()])
                 .output();
         }
@@ -299,7 +519,8 @@ pub fn run() {
                             for (_task_id, pid) in pids {
                                 #[cfg(target_os = "windows")]
                                 {
-                                    let _ = Command::new("taskkill")
+                                    let taskkill_exe = find_windows_binary("taskkill");
+                                    let _ = Command::new(&taskkill_exe)
                                         .args(&["/F", "/T", "/PID", &pid.to_string()])
                                         .output();
                                 }

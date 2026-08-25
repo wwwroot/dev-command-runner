@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <!-- Flat Dark Squircle -->
+  <rect x="36" y="36" width="440" height="440" rx="96" fill="#0a0d14" stroke="#1e293b" stroke-width="4" />
+  
+  <!-- Flat Terminal Prompt Chevron & Underscore -->
+  <polyline points="145,165 245,256 145,347" fill="none" stroke="#3b82f6" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" />
+  <line x1="280" y1="347" x2="380" y2="347" stroke="#3b82f6" stroke-width="36" stroke-linecap="round" />
+</svg>

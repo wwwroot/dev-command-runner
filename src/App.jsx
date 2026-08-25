@@ -41,17 +41,30 @@ export function App() {
     let unlistenMove;
     let unlistenClose;
 
+    const MIN_WINDOW_WIDTH = 520;
+    const MIN_WINDOW_HEIGHT = 480;
+
     async function restoreWindow() {
       try {
+        await win.setMinSize(new LogicalSize(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT));
+
         const savedSize = localStorage.getItem("window_size");
         if (savedSize) {
           const { width, height } = JSON.parse(savedSize);
-          await win.setSize(new LogicalSize(width, height));
+          const validW = Math.max(MIN_WINDOW_WIDTH, Number(width) || MIN_WINDOW_WIDTH);
+          const validH = Math.max(MIN_WINDOW_HEIGHT, Number(height) || MIN_WINDOW_HEIGHT);
+          await win.setSize(new LogicalSize(validW, validH));
         }
+
         const savedPos = localStorage.getItem("window_position");
         if (savedPos) {
           const { x, y } = JSON.parse(savedPos);
-          await win.setPosition(new LogicalPosition(x, y));
+          const numX = Number(x);
+          const numY = Number(y);
+          // Ensure coordinates are not Windows minimized state (-32000) or corrupt
+          if (!isNaN(numX) && !isNaN(numY) && numX > -2000 && numX < 30000 && numY > -2000 && numY < 30000) {
+            await win.setPosition(new LogicalPosition(numX, numY));
+          }
         }
       } catch (err) {
         console.error("Failed to restore window state:", err);
@@ -68,7 +81,13 @@ export function App() {
             if (factor > 0) {
               const logicalWidth = size.width / factor;
               const logicalHeight = size.height / factor;
-              localStorage.setItem("window_size", JSON.stringify({ width: logicalWidth, height: logicalHeight }));
+              // Only save if window is active and meets minimum dimensions (ignore minimized 0x0 states)
+              if (logicalWidth >= MIN_WINDOW_WIDTH && logicalHeight >= MIN_WINDOW_HEIGHT) {
+                localStorage.setItem(
+                  "window_size",
+                  JSON.stringify({ width: logicalWidth, height: logicalHeight })
+                );
+              }
             }
           } catch (err) {
             console.error("Failed to save window size:", err);
@@ -83,7 +102,13 @@ export function App() {
             if (factor > 0) {
               const logicalX = pos.x / factor;
               const logicalY = pos.y / factor;
-              localStorage.setItem("window_position", JSON.stringify({ x: logicalX, y: logicalY }));
+              // Ignore Windows minimized positions like -32000
+              if (logicalX > -2000 && logicalY > -2000) {
+                localStorage.setItem(
+                  "window_position",
+                  JSON.stringify({ x: logicalX, y: logicalY })
+                );
+              }
             }
           } catch (err) {
             console.error("Failed to save window position:", err);
@@ -391,7 +416,7 @@ export function App() {
           </span>
         </div>
         <div className="statusbar-right" data-tauri-drag-region>
-          <span data-tauri-drag-region>v1.0.1</span>
+          <span data-tauri-drag-region>v1.0.2</span>
         </div>
       </footer>
 
