@@ -1,13 +1,17 @@
+<p align="center">
+  <img src="assets/screenshot.png?v=1.0.1" width="80%" alt="Dev Command Runner Screenshot">
+</p>
+
 # Dev Command Runner
 
-[![Tauri](https://img.shields.io/badge/Tauri-v2.11-24C8D8?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
-[![Rust](https://img.shields.io/badge/Rust-2021-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
-[![React](https://img.shields.io/badge/React-18.2-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+<p align="left">
+  <a href="https://tauri.app"><img src="https://img.shields.io/badge/Tauri-v2.11-24C8D8?style=flat-square&logo=tauri&logoColor=white" alt="Tauri"></a>
+  <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/Rust-2021-000000?style=flat-square&logo=rust&logoColor=white" alt="Rust"></a>
+  <a href="https://react.dev"><img src="https://img.shields.io/badge/React-18.2-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" alt="License: MIT"></a>
+</p>
 
 A cross-platform desktop dashboard to manage, run, and monitor background development processes, servers, and scripts. Built with Tauri v2, Rust, and React, it operates inside a frameless window layout and executes shell tasks natively using background process sessions.
-
-<img src="assets/screenshot.png?v=1.0.1" width="75%" alt="Application Screenshot">
 
 ---
 
