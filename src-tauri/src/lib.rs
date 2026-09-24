@@ -30,42 +30,70 @@ fn get_system_root() -> String {
 }
 
 #[cfg(target_os = "windows")]
-fn find_windows_binary(name: &str) -> String {
-    let sys_root = get_system_root();
-    let candidates: Vec<String> = match name {
-        "powershell" | "powershell.exe" => vec![
-            format!("{}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", sys_root),
-            format!("{}\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe", sys_root),
-            "powershell.exe".to_string(),
-            "pwsh.exe".to_string(),
-        ],
-        "cmd" | "cmd.exe" => vec![
-            format!("{}\\System32\\cmd.exe", sys_root),
-            format!("{}\\SysWOW64\\cmd.exe", sys_root),
-            "cmd.exe".to_string(),
-        ],
-        "taskkill" | "taskkill.exe" => vec![
-            format!("{}\\System32\\taskkill.exe", sys_root),
-            format!("{}\\SysWOW64\\taskkill.exe", sys_root),
-            "taskkill.exe".to_string(),
-        ],
-        _ => vec![
-            format!("{}\\System32\\{}.exe", sys_root, name),
-            format!("{}.exe", name),
-            name.to_string(),
-        ],
-    };
-
-    for candidate in candidates {
-        if std::path::Path::new(&candidate).exists() {
-            return candidate;
+fn get_comspec() -> String {
+    if let Ok(comspec) = std::env::var("ComSpec") {
+        if !comspec.trim().is_empty() && std::path::Path::new(&comspec).exists() {
+            return comspec;
         }
     }
-
-    if !name.ends_with(".exe") {
-        format!("{}.exe", name)
+    let sys_root = get_system_root();
+    let p = format!("{}\\System32\\cmd.exe", sys_root);
+    if std::path::Path::new(&p).exists() {
+        p
     } else {
-        name.to_string()
+        "cmd.exe".to_string()
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn kill_process_tree_native(root_pid: u32) {
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32First, Process32Next, PROCESSENTRY32, TH32CS_SNAPPROCESS,
+    };
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, TerminateProcess, PROCESS_TERMINATE,
+    };
+
+    let mut pids_to_kill = Vec::new();
+    pids_to_kill.push(root_pid);
+
+    unsafe {
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snapshot != INVALID_HANDLE_VALUE {
+            let mut all_processes: Vec<(u32, u32)> = Vec::new();
+            let mut entry: PROCESSENTRY32 = std::mem::zeroed();
+            entry.dwSize = std::mem::size_of::<PROCESSENTRY32>() as u32;
+
+            if Process32First(snapshot, &mut entry) != 0 {
+                loop {
+                    all_processes.push((entry.th32ProcessID, entry.th32ParentProcessID));
+                    if Process32Next(snapshot, &mut entry) == 0 {
+                        break;
+                    }
+                }
+            }
+            CloseHandle(snapshot);
+
+            let mut i = 0;
+            while i < pids_to_kill.len() {
+                let current_parent = pids_to_kill[i];
+                for &(pid, parent_pid) in &all_processes {
+                    if parent_pid == current_parent && !pids_to_kill.contains(&pid) {
+                        pids_to_kill.push(pid);
+                    }
+                }
+                i += 1;
+            }
+        }
+
+        for &pid in pids_to_kill.iter().rev() {
+            let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
+            if handle != std::ptr::null_mut() && handle != INVALID_HANDLE_VALUE {
+                let _ = TerminateProcess(handle, 1);
+                CloseHandle(handle);
+            }
+        }
     }
 }
 
@@ -178,37 +206,24 @@ async fn spawn_shell_task(
         );
 
         #[cfg(target_os = "windows")]
-        let (shell_exe, args, use_fallback) = {
-            let ps_binary = find_windows_binary("powershell");
-            let formatted_cmd = format!(
-                "Set-Location -LiteralPath '{}'; {}",
-                cwd.replace("'", "''"),
-                command
-            );
-            (
-                ps_binary,
-                vec![
-                    "-ExecutionPolicy".to_string(),
-                    "Bypass".to_string(),
-                    "-Command".to_string(),
-                    formatted_cmd,
-                ],
-                true,
-            )
+        let mut child_cmd = {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            let mut cmd = Command::new(get_comspec());
+            cmd.arg("/D").arg("/C").raw_arg(&command);
+            cmd.creation_flags(CREATE_NO_WINDOW);
+            cmd.env("PATH", get_augmented_path());
+            cmd
         };
 
         #[cfg(not(target_os = "windows"))]
-        let (shell_exe, args, use_fallback) = {
-            let formatted_cmd = format!(
-                "cd '{}' && {}",
-                cwd.replace("'", "'\\''"),
-                command
-            );
-            ("sh".to_string(), vec!["-c".to_string(), formatted_cmd], false)
+        let mut child_cmd = {
+            let mut cmd = Command::new("sh");
+            cmd.arg("-c").arg(&command);
+            cmd.env("PATH", get_augmented_path_unix());
+            cmd
         };
 
-        let mut child_cmd = Command::new(&shell_exe);
-        child_cmd.args(&args);
         child_cmd.stdout(Stdio::piped());
         child_cmd.stderr(Stdio::piped());
 
@@ -217,107 +232,29 @@ async fn spawn_shell_task(
             child_cmd.current_dir(cwd_path);
         }
 
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-            child_cmd.creation_flags(CREATE_NO_WINDOW);
-            child_cmd.env("PATH", get_augmented_path());
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            child_cmd.env("PATH", get_augmented_path_unix());
-        }
-
         let mut child = match child_cmd.spawn() {
             Ok(c) => c,
             Err(e) => {
-                #[cfg(target_os = "windows")]
-                if use_fallback {
-                    let cmd_binary = find_windows_binary("cmd");
-                    let formatted_cmd_str = format!("cd /d \"{}\" && {}", cwd.replace("\"", "\"\""), command);
-                    let mut fallback_cmd = Command::new(&cmd_binary);
-                    fallback_cmd.args(&["/D", "/S", "/C", &formatted_cmd_str]);
-                    fallback_cmd.stdout(Stdio::piped());
-                    fallback_cmd.stderr(Stdio::piped());
-
-                    if cwd_path.is_dir() {
-                        fallback_cmd.current_dir(cwd_path);
-                    }
-
-                    use std::os::windows::process::CommandExt;
-                    const CREATE_NO_WINDOW: u32 = 0x08000000;
-                    fallback_cmd.creation_flags(CREATE_NO_WINDOW);
-                    fallback_cmd.env("PATH", get_augmented_path());
-
-                    match fallback_cmd.spawn() {
-                        Ok(c) => c,
-                        Err(e2) => {
-                            let _ = window.emit(
-                                "task-log",
-                                LogPayload {
-                                    task_id: task_id_clone.clone(),
-                                    line: format!(
-                                        "[SYS-ERR] Failed to spawn process (PowerShell: {}, CMD: {})",
-                                        e, e2
-                                    ),
-                                    is_error: true,
-                                },
-                            );
-                            let _ = window.emit(
-                                "task-status",
-                                StatusPayload {
-                                    task_id: task_id_clone,
-                                    status: "FAILED".to_string(),
-                                    code: None,
-                                },
-                            );
-                            return;
-                        }
-                    }
-                } else {
-                    let _ = window.emit(
-                        "task-log",
-                        LogPayload {
-                            task_id: task_id_clone.clone(),
-                            line: format!("[SYS-ERR] Failed to spawn process: {}", e),
-                            is_error: true,
-                        },
-                    );
-                    let _ = window.emit(
-                        "task-status",
-                        StatusPayload {
-                            task_id: task_id_clone,
-                            status: "FAILED".to_string(),
-                            code: None,
-                        },
-                    );
-                    return;
-                }
-
-                #[cfg(not(target_os = "windows"))]
-                {
-                    let _ = window.emit(
-                        "task-log",
-                        LogPayload {
-                            task_id: task_id_clone.clone(),
-                            line: format!("[SYS-ERR] Failed to spawn process: {}", e),
-                            is_error: true,
-                        },
-                    );
-                    let _ = window.emit(
-                        "task-status",
-                        StatusPayload {
-                            task_id: task_id_clone,
-                            status: "FAILED".to_string(),
-                            code: None,
-                        },
-                    );
-                    return;
-                }
+                let _ = window.emit(
+                    "task-log",
+                    LogPayload {
+                        task_id: task_id_clone.clone(),
+                        line: format!("[SYS-ERR] Failed to spawn process: {}", e),
+                        is_error: true,
+                    },
+                );
+                let _ = window.emit(
+                    "task-status",
+                    StatusPayload {
+                        task_id: task_id_clone,
+                        status: "FAILED".to_string(),
+                        code: None,
+                    },
+                );
+                return;
             }
         };
+
 
         let pid = child.id();
         {
@@ -424,36 +361,9 @@ fn is_task_process_active(process_map: State<'_, ProcessMap>, task_id: String) -
 }
 
 #[tauri::command]
-fn open_in_browser(url: String) -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    {
-        let cmd_exe = find_windows_binary("cmd");
-        if let Err(e) = Command::new(&cmd_exe)
-            .args(&["/C", "start", "", &url])
-            .spawn()
-        {
-            return Err(format!("Failed to open URL: {}", e));
-        }
-    }
-    #[cfg(target_os = "macos")]
-    {
-        if let Err(e) = Command::new("open")
-            .arg(&url)
-            .spawn()
-        {
-            return Err(format!("Failed to open URL: {}", e));
-        }
-    }
-    #[cfg(target_os = "linux")]
-    {
-        if let Err(e) = Command::new("xdg-open")
-            .arg(&url)
-            .spawn()
-        {
-            return Err(format!("Failed to open URL: {}", e));
-        }
-    }
-    Ok(())
+fn open_in_browser(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener().open_url(&url, None::<&str>).map_err(|e| format!("Failed to open URL: {}", e))
 }
 
 #[tauri::command]
@@ -466,10 +376,7 @@ fn kill_task_by_id(map_mutex: &Arc<Mutex<HashMap<String, u32>>>, task_id: &str) 
     if let Some(pid) = map.remove(task_id) {
         #[cfg(target_os = "windows")]
         {
-            let taskkill_exe = find_windows_binary("taskkill");
-            let _ = Command::new(&taskkill_exe)
-                .args(&["/F", "/T", "/PID", &pid.to_string()])
-                .output();
+            kill_process_tree_native(pid);
         }
         #[cfg(not(target_os = "windows"))]
         {
@@ -485,6 +392,8 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(process_map)
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
@@ -519,10 +428,7 @@ pub fn run() {
                             for (_task_id, pid) in pids {
                                 #[cfg(target_os = "windows")]
                                 {
-                                    let taskkill_exe = find_windows_binary("taskkill");
-                                    let _ = Command::new(&taskkill_exe)
-                                        .args(&["/F", "/T", "/PID", &pid.to_string()])
-                                        .output();
+                                    kill_process_tree_native(pid);
                                 }
                                 #[cfg(not(target_os = "windows"))]
                                 {

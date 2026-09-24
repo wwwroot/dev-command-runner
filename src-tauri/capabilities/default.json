@@ -16,6 +16,8 @@
     "shell:default",
     "shell:allow-spawn",
     "shell:allow-execute",
+    "shell:allow-open",
+    "opener:default",
     "dialog:default",
     "dialog:allow-open",
     "fs:default",
